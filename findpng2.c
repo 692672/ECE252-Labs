@@ -64,11 +64,12 @@ typedef struct recv_buf2 {
 } RECV_BUF;
 
 typedef struct table {
-    char list[500][256];
+    char list[500];
     int size;
 } TABLE;
 
-TABLE frontier;
+TABLE visited;
+char frontier[500][256];
 
 htmlDocPtr mem_getdoc(char *buf, int size, const char *url);
 xmlXPathObjectPtr getnodeset (xmlDocPtr doc, xmlChar *xpath);
@@ -159,10 +160,11 @@ int find_http(char *buf, int size, int follow_relative_links, const char *base_u
                 //printf("href: %s\n", href);
 		int hashValue = hash((unsigned char *)href);
 		printf("hashed value is %d for url %s\n", hashValue, (char *)href);
-		if (frontier.list[hashValue][0] == 0) {
+		if (visited.list[hashValue] == 0) {
 		    printf("added url %s\n", (char *)href);
-		    strcpy(frontier.list[hashValue], (char *)href);
-		    frontier.size ++;
+		    visited.list[hashValue] = hashValue;
+		    strcpy(frontier[visited.size], (char *)href);
+		    visited.size ++;
 		}
 		if (logBool) {
 		    fprintf(log, "%s\n", (char *)href);
@@ -479,8 +481,9 @@ int main( int argc, char** argv )
     logFile[0] = 0;
     bool logBool = true;
 
-    frontier.size = 0;
-    memset(frontier.list, 0, sizeof(frontier.list)); 
+    visited.size = 0;
+    memset(visited.list, 0, sizeof(visited.list)); 
+    memset(frontier, 0, sizeof(frontier));
     CURL *curl_handle;
     CURLcode res;
     char url[256];
@@ -529,8 +532,10 @@ int main( int argc, char** argv )
 
     /* process the download data */
     process_data(curl_handle, &recv_buf, logFile, logBool);
-    for (int i = 0; i < 500; i ++) {
-	//puts(frontier.list[i]);
+    for (int i = 0; i < visited.size; i ++) {
+	printf("printing from char[] frontier at indx %d: ", i);
+	puts(frontier[i]);
+	printf("\n");
 /*
         RECV_BUF buf;
         CURL *handle;
@@ -539,7 +544,7 @@ int main( int argc, char** argv )
         cleanup(handle, &buf);
   */  
     }
-    printf("frontier.size = %d\n", frontier.size);
+    printf("# of urls added= %d\n", visited.size);
     /* cleaning up */
     cleanup(curl_handle, &recv_buf);
     return 0;
