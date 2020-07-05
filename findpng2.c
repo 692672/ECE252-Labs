@@ -81,7 +81,7 @@ int recv_buf_cleanup(RECV_BUF *ptr);
 void cleanup(CURL *curl, RECV_BUF *ptr);
 int write_file(const char *path, const void *in, size_t len);
 CURL *easy_handle_init(RECV_BUF *ptr, const char *url);
-int process_data(CURL *curl_handle, RECV_BUF *p_recv_buf,char logFile[], bool logBool);
+int process_data(CURL *curl_handle, RECV_BUF *p_recv_buf,char logFile[], bool logBool, FILE* log);
 
 
 htmlDocPtr mem_getdoc(char *buf, int size, const char *url)
@@ -157,7 +157,6 @@ int find_http(char *buf, int size, int follow_relative_links, const char *base_u
                 xmlFree(old);
             }
             if ( href != NULL && !strncmp((const char *)href, "http", 4) ) {
-                //printf("href: %s\n", href);
 		int hashValue = hash((unsigned char *)href);
 		printf("hashed value is %d for url %s\n", hashValue, (char *)href);
 		if (visited.list[hashValue] == 0) {
@@ -428,7 +427,7 @@ bool isPng(RECV_BUF *recv_buf) {
  * @return 0 on success; non-zero otherwise
  */
 
-int process_data(CURL *curl_handle, RECV_BUF *p_recv_buf, char logFile[], bool logBool)
+int process_data(CURL *curl_handle, RECV_BUF *p_recv_buf, char logFile[], bool logBool, FILE* log)
 {
     CURLcode res;
     char fname[256];
@@ -455,10 +454,6 @@ int process_data(CURL *curl_handle, RECV_BUF *p_recv_buf, char logFile[], bool l
     }
     
     FILE* fp = fopen("png_urls.txt", "w");
-    FILE* log = NULL;
-    if (logBool) {
-	    log = fopen("log.txt", "w");
-    }
 
     if ( strstr(ct, CT_HTML) ) {
         return process_html(curl_handle, p_recv_buf, log, logBool);
@@ -467,7 +462,6 @@ int process_data(CURL *curl_handle, RECV_BUF *p_recv_buf, char logFile[], bool l
     } else {
         sprintf(fname, "./output_%d", pid);
     }
-    fclose(log);
     fclose(fp);
     return write_file(fname, p_recv_buf->buf, p_recv_buf->size);
 }
@@ -506,10 +500,20 @@ int main( int argc, char** argv )
     }
     strcpy(url, argv[argc-1]);
     printf("%s: URL is %s\n", argv[0], url);
-    
     if (logFile[0] == 0) {
         logBool = false;
     }
+    FILE* log = NULL;
+    if (logBool) {
+	log = fopen(&logFile[0], "w");
+	fprintf(log, "%s\n", &url[0]);
+    }
+    int seedHash = hash(&url[0]);
+    printf("hashed value is %d for url %s\n", seedHash, &url[0]);
+    visited.list[seedHash] = seedHash;
+    strcpy(frontier[visited.size], &url[0]);
+    visited.size ++;
+
     curl_global_init(CURL_GLOBAL_DEFAULT);
     curl_handle = easy_handle_init(&recv_buf, url);
 
@@ -531,7 +535,8 @@ int main( int argc, char** argv )
     }
 
     /* process the download data */
-    process_data(curl_handle, &recv_buf, logFile, logBool);
+    process_data(curl_handle, &recv_buf, logFile, logBool, log);
+        
     for (int i = 0; i < visited.size; i ++) {
 	printf("printing from char[] frontier at indx %d: ", i);
 	puts(frontier[i]);
@@ -545,6 +550,7 @@ int main( int argc, char** argv )
   */  
     }
     printf("# of urls added= %d\n", visited.size);
+    fclose(log);
     /* cleaning up */
     cleanup(curl_handle, &recv_buf);
     return 0;
