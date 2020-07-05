@@ -165,9 +165,9 @@ int find_http(char *buf, int size, int follow_relative_links, const char *base_u
 		    visited.list[hashValue] = hashValue;
 		    strcpy(frontier[visited.size], (char *)href);
 		    visited.size ++;
-		}
-		if (logBool) {
-		    fprintf(log, "%s\n", (char *)href);
+		    if (logBool) {
+		        fprintf(log, "%s\n", (char *)href);
+		    }
 		}
 	    }
             xmlFree(href);
