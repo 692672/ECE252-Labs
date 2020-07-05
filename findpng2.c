@@ -38,7 +38,7 @@
 #include <libxml/xpath.h>
 #include <libxml/uri.h>
 #include <stdbool.h> 
-#include <search.h>
+#include <math.h>
 
 #define SEED_URL "http://ece252-1.uwaterloo.ca/lab3/index.html"
 #define ECE252_HEADER "X-Ece252-Fragment: "
@@ -64,7 +64,7 @@ typedef struct recv_buf2 {
 } RECV_BUF;
 
 typedef struct table {
-    char list[500][500];
+    char list[500][256];
     int size;
 } TABLE;
 
@@ -120,10 +120,19 @@ xmlXPathObjectPtr getnodeset (xmlDocPtr doc, xmlChar *xpath)
     }
     return result;
 }
+unsigned long hash(unsigned char *str)
+{
+    unsigned long hash = 5381;
+    int c;
+
+    while (c = *str++)
+        hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+
+    return hash % 499;
+}
 
 int find_http(char *buf, int size, int follow_relative_links, const char *base_url, FILE* log, bool logBool)
 {
-
     int i;
     htmlDocPtr doc;
     xmlChar *xpath = (xmlChar*) "//a/@href";
@@ -148,8 +157,13 @@ int find_http(char *buf, int size, int follow_relative_links, const char *base_u
             }
             if ( href != NULL && !strncmp((const char *)href, "http", 4) ) {
                 //printf("href: %s\n", href);
-		strcpy(frontier.list[frontier.size], (char *)href);
-                frontier.size ++;
+		int hashValue = hash((unsigned char *)href);
+		printf("hashed value is %d for url %s\n", hashValue, (char *)href);
+		if (frontier.list[hashValue][0] == 0) {
+		    printf("added url %s\n", (char *)href);
+		    strcpy(frontier.list[hashValue], (char *)href);
+		    frontier.size ++;
+		}
 		if (logBool) {
 		    fprintf(log, "%s\n", (char *)href);
 		}
@@ -466,6 +480,7 @@ int main( int argc, char** argv )
     bool logBool = true;
 
     frontier.size = 0;
+    memset(frontier.list, 0, sizeof(frontier.list)); 
     CURL *curl_handle;
     CURLcode res;
     char url[256];
@@ -514,17 +529,17 @@ int main( int argc, char** argv )
 
     /* process the download data */
     process_data(curl_handle, &recv_buf, logFile, logBool);
-    for (int i = 0; i < frontier.size; i ++) {
-       /*for (int j = 0; j < 10; j ++) {
-	   scanf("%s", frontier.list[i][j]);
-       }*/
-       puts(frontier.list[i]);
-       RECV_BUF buf;
-       CURL *handle;
-       handle = easy_handle_init(&buf, frontier.list[i]);
-       process_data(handle, &buf, logFile, logBool); 
-       cleanup(handle, &buf);
+    for (int i = 0; i < 500; i ++) {
+	//puts(frontier.list[i]);
+/*
+        RECV_BUF buf;
+        CURL *handle;
+        handle = easy_handle_init(&buf, frontier.list[i]);
+        process_data(handle, &buf, logFile, logBool); 
+        cleanup(handle, &buf);
+  */  
     }
+    printf("frontier.size = %d\n", frontier.size);
     /* cleaning up */
     cleanup(curl_handle, &recv_buf);
     return 0;
