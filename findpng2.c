@@ -64,7 +64,7 @@ typedef struct recv_buf2 {
 } RECV_BUF;
 
 typedef struct table {
-    char list[1000];
+    unsigned long list[1000];
     int size;
 } TABLE;
 
@@ -130,7 +130,7 @@ unsigned long hash(unsigned char *str)
     while (c = *str++)
         hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
 
-    return hash % 887;
+    return hash % 997;
 }
 
 int find_http(char *buf, int size, int follow_relative_links, const char *base_url, FILE* log, bool logBool)
@@ -160,7 +160,7 @@ int find_http(char *buf, int size, int follow_relative_links, const char *base_u
             if ( href != NULL && !strncmp((const char *)href, "http", 4) ) {
 		int hashValue = hash((unsigned char *)href);
 		printf("hashed value is %d for url %s\n", hashValue, (char *)href);
-		if (visited.list[hashValue] == 0) {
+		if (visited.list[hashValue] == -1) {
 		    printf("added url %s\n", (char *)href);
 		    visited.list[hashValue] = hashValue;
 		    strcpy(frontier[visited.size], (char *)href);
@@ -504,9 +504,9 @@ int main( int argc, char** argv )
     bool logBool = true;
 
     visited.size = 0;
-    memset(visited.list, 0, sizeof(visited.list)); 
+    memset(visited.list, -1, sizeof(visited.list)); 
     visitedPNG.size = 0;
-    memset(visitedPNG.list, 0, sizeof(visited.list));
+    memset(visitedPNG.list, -1, sizeof(visited.list));
     memset(frontier, 0, sizeof(frontier));
     CURL *curl_handle;
     CURLcode res;
@@ -577,7 +577,7 @@ int main( int argc, char** argv )
     
     for (int i = 0; i < visited.size; i ++) {
 	//puts(visited.list[i]);
-	printf("%d: %d\n",i ,visited.list[i]);
+	printf("%d: %ld\n",i ,visited.list[i]);
 /*
         RECV_BUF buf;
         CURL *handle;
