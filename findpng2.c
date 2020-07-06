@@ -64,12 +64,13 @@ typedef struct recv_buf2 {
 } RECV_BUF;
 
 typedef struct table {
-    char list[500];
+    char list[1000];
     int size;
 } TABLE;
 
 TABLE visited;
-char frontier[500][256];
+TABLE visitedPNG;
+char frontier[1000][256];
 
 htmlDocPtr mem_getdoc(char *buf, int size, const char *url);
 xmlXPathObjectPtr getnodeset (xmlDocPtr doc, xmlChar *xpath);
@@ -129,7 +130,7 @@ unsigned long hash(unsigned char *str)
     while (c = *str++)
         hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
 
-    return hash % 499;
+    return hash % 887;
 }
 
 int find_http(char *buf, int size, int follow_relative_links, const char *base_url, FILE* log, bool logBool)
@@ -165,7 +166,7 @@ int find_http(char *buf, int size, int follow_relative_links, const char *base_u
 		    strcpy(frontier[visited.size], (char *)href);
 		    visited.size ++;
 		    if (logBool) {
-		        fprintf(log, "%s\n", (char *)href);
+		        fprintf(log, "%s with hash # %d\n", (char *)href, hashValue);
 		    }
 		}
 	    }
@@ -402,15 +403,19 @@ int process_html(CURL *curl_handle, RECV_BUF *p_recv_buf, FILE* log, bool logBoo
 
 int process_png(CURL *curl_handle, RECV_BUF *p_recv_buf, FILE* fp)
 {
-    pid_t pid =getpid();
-    char fname[256];
     char *eurl = NULL;          /* effective URL */
     curl_easy_getinfo(curl_handle, CURLINFO_EFFECTIVE_URL, &eurl);
     if ( eurl != NULL) {
         printf("The PNG url is: %s\n", eurl);
     }
-    fprintf(fp, "%s\n", eurl);
-    sprintf(fname, "./output_%d_%d.png", p_recv_buf->seq, pid);
+    int pngHash = hash(eurl);
+    if (visitedPNG.list[pngHash] == 0) {
+	visitedPNG.list[pngHash] = pngHash;
+	strcpy(frontier[visited.size], eurl);
+	visited.size ++;
+	visitedPNG.size ++;
+	fprintf(fp, "%s\n", eurl);
+    }
     return 0;
 }
 
@@ -466,6 +471,29 @@ int process_data(CURL *curl_handle, RECV_BUF *p_recv_buf, char logFile[], bool l
     return write_file(fname, p_recv_buf->buf, p_recv_buf->size);
 }
 
+int visitURL(char* url, char logFile[], bool logBool, FILE* log) {
+    RECV_BUF buf;
+    CURL *handle;
+    CURLcode r;
+    printf("going to %s:\n", url);
+    handle = easy_handle_init(&buf, url);
+    if ( handle == NULL ) {
+        fprintf(stderr, "Curl initialization failed. Exiting...\n");
+        curl_global_cleanup();
+        abort();
+    }
+    r = curl_easy_perform(handle);
+    if( r != CURLE_OK) {
+        fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(r));
+        cleanup(handle, &buf);
+        //exit(1);
+	return -1;
+    }
+    process_data(handle, &buf, logFile, logBool, log);
+    cleanup(handle, &buf);
+    return 0;
+}
+
 int main( int argc, char** argv ) 
 {
     int c;
@@ -477,6 +505,8 @@ int main( int argc, char** argv )
 
     visited.size = 0;
     memset(visited.list, 0, sizeof(visited.list)); 
+    visitedPNG.size = 0;
+    memset(visitedPNG.list, 0, sizeof(visited.list));
     memset(frontier, 0, sizeof(frontier));
     CURL *curl_handle;
     CURLcode res;
@@ -536,11 +566,18 @@ int main( int argc, char** argv )
 
     /* process the download data */
     process_data(curl_handle, &recv_buf, logFile, logBool, log);
-        
+    printf("# of urls added= %d\n", visited.size);
+    
+    int counter = 1;
+    while (counter < visited.size) {
+    	visitURL(frontier[counter], logFile, logBool, log);
+	printf("Incremented counter ---------------------------------------------------------------------------------------------------- counter is %d and visited.size is %d\n", counter, visited.size);
+	counter ++;
+    }
+    
     for (int i = 0; i < visited.size; i ++) {
-	printf("printing from char[] frontier at indx %d: ", i);
-	puts(frontier[i]);
-	printf("\n");
+	//puts(visited.list[i]);
+	printf("%d: %d\n",i ,visited.list[i]);
 /*
         RECV_BUF buf;
         CURL *handle;
@@ -549,7 +586,6 @@ int main( int argc, char** argv )
         cleanup(handle, &buf);
   */  
     }
-    printf("# of urls added= %d\n", visited.size);
     fclose(log);
     /* cleaning up */
     cleanup(curl_handle, &recv_buf);
