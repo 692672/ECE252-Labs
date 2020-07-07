@@ -71,6 +71,9 @@ typedef struct table {
 TABLE visited;
 TABLE visitedPNG;
 char frontier[1000][256];
+int t = 1;
+int m = 50;
+int pngs = 0;
 
 htmlDocPtr mem_getdoc(char *buf, int size, const char *url);
 xmlXPathObjectPtr getnodeset (xmlDocPtr doc, xmlChar *xpath);
@@ -406,17 +409,22 @@ int process_png(CURL *curl_handle, RECV_BUF *p_recv_buf, FILE* fp)
     char *eurl = NULL;          /* effective URL */
     curl_easy_getinfo(curl_handle, CURLINFO_EFFECTIVE_URL, &eurl);
     int pngHash = hash(eurl);
-    if ( eurl != NULL) {
-        printf("The PNG url is: %s\n", eurl);
+
+    if (pngs < m) {
+	pngs++;
+	if ( eurl != NULL) {
+            printf("The PNG url is: %s\n", eurl);
+        }
+        if (visitedPNG.list[pngHash] == -1) {
+            printf("writing to file\n");
+	    visitedPNG.list[pngHash] = pngHash;
+            visitedPNG.size ++;
+            fprintf(fp, "%s with hash # %d\n", eurl, pngHash);
+        }
     }
-    if (visitedPNG.list[pngHash] == -1) {
-	visitedPNG.list[pngHash] = pngHash;
-	visitedPNG.size ++;
-	fprintf(fp, "%s with hash # %d\n", eurl, pngHash);
+    else {
+	return 9;
     }
-    if (visited.list[pngHash] == -1) {
-    }
-    return 0;
 }
 
 
@@ -484,7 +492,9 @@ int visitURL(char* url, char logFile[], bool logBool, FILE* log, FILE* fp) {
         //exit(1);
 	return -1;
     }
-    process_data(handle, &buf, logFile, logBool, log, fp);
+    if (process_data(handle, &buf, logFile, logBool, log, fp) == 9) {    
+        return 9;
+    }
     cleanup(handle, &buf);
     return 0;
 }
@@ -492,8 +502,6 @@ int visitURL(char* url, char logFile[], bool logBool, FILE* log, FILE* fp) {
 int main( int argc, char** argv ) 
 {
     int c;
-    int t = 1;
-    int m = 50;
     char logFile[256];
     logFile[0] = 0;
     bool logBool = true;
@@ -515,7 +523,13 @@ int main( int argc, char** argv )
             break;
         case 'm':
             m = strtoul(optarg, NULL, 10);
-            break;
+            if (m > 50) {
+		m = 50;
+	    }
+	    else if (m == 0) {
+		return 0;
+	    }
+	    break;
 	case 'v':
 	    strcpy(logFile, optarg);
             break;
@@ -562,11 +576,15 @@ int main( int argc, char** argv )
     /* process the download data */
     FILE* fp = fopen("png_urls.txt", "w");
     process_data(curl_handle, &recv_buf, logFile, logBool, log, fp);
-    printf("# of urls added= %d\n", visited.size);
     
     int counter = 1;
     while (counter < visited.size) {
-    	visitURL(frontier[counter], logFile, logBool, log, fp);
+	if (visitURL(frontier[counter], logFile, logBool, log, fp) == 9) {
+	    fclose(fp);
+            fclose(log);
+	    cleanup(curl_handle, &recv_buf);
+            return 0;
+	}
 	printf("Incremented counter ---------------------------------------------------------------------------------------------------- counter is %d and visited.size is %d\n", counter, visited.size);
 	counter ++;
     }
@@ -575,9 +593,8 @@ int main( int argc, char** argv )
 	//puts(visited.list[i]);
 	printf("%d: %ld\n",i ,visitedPNG.list[i]);
     }
-    printf("visitedPNG.size: %d\n", visitedPNG.size);
-    fclose(log);
     fclose(fp);
+    fclose(log);
     /* cleaning up */
     cleanup(curl_handle, &recv_buf);
     return 0;
